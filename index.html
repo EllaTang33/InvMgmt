@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>简易库存管理系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .action-buttons {
+            margin: 20px 0;
+        }
+        button {
+            padding: 8px 12px;
+            margin-right: 5px;
+            cursor: pointer;
+        }
+        .add-form {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .add-form input {
+            margin-right: 10px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>消耗品管理</h1>
+
+<div class="add-form">
+    <h3>添加物品</h3>
+    <input type="text" id="newId" placeholder="物品名称">
+    <input type="text" id="type" placeholder="类型">
+    <!--<input type="number" id="newPrice" placeholder="价格" min="0" step="0.01">-->
+    <!--添加-->
+    <input type="number" id="numRemain" placeholder="剩余数量" min="0" step="0.01">
+        <!--numRemain/consumeRate = 可继续使用时间。在添加后的表格里显示为需补充日期 -->
+        <!--消耗速度的输入框右侧需要一个dropbox，选择是numConsume每天/周/月-->
+    <input type="number" id="consumeRate" placeholder="消耗速度（每天/周）" min="0" step="0.01">
+    <!--添加-->
+    <button onclick="addProduct()">添加</button>
+</div>
+
+<div class="action-buttons">
+    <button onclick="saveData()">保存</button>
+    <button onclick="loadData()">加载</button>
+    <button onclick="exportToCSV()">导出为CSV</button>
+</div>
+
+<table id="inventoryTable">
+    <thead>
+        <tr>
+            <th>产品名称</th>
+            <th>数量</th>
+            <th>剩余数量</th>
+            <th>预计清零日期</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- 表格内容将通过JavaScript动态生成 -->
+    </tbody>
+</table>
+
+<script>
+    // 初始化库存数据
+    let inventory = [
+        { name: '此处输入消耗品名称', quantity: 1, price: 99.99, date:1/2/2025 },
+    ];
+
+    // 页面加载时渲染表格
+    document.addEventListener('DOMContentLoaded', function() {
+        renderTable();
+    });
+
+    // 渲染表格函数
+    function renderTable() {
+        const tableBody = document.querySelector('#inventoryTable tbody');
+        tableBody.innerHTML = '';
+        
+        inventory.forEach((product, index) => {
+            const row = document.createElement('tr');
+            const total = product.quantity * product.price;
+            
+            row.innerHTML = `
+                <td contenteditable="true" onblur="updateProduct(${index}, 'name', this)">${product.name}</td>
+                <td contenteditable="true" onblur="updateProduct(${index}, 'quantity', this)">${product.quantity}</td>
+                <td contenteditable="true" onblur="updateProduct(${index}, 'price', this)">${product.price.toFixed(2)}</td>
+                <td>${total.toFixed(2)}</td>
+                <td><button onclick="deleteProduct(${index})">删除</button></td>
+            `;
+            
+            tableBody.appendChild(row);
+        });
+    }
+
+    // 更新产品信息
+    function updateProduct(index, property, element) {
+        const value = property === 'quantity' || property === 'price' 
+            ? parseFloat(element.textContent) 
+            : element.textContent;
+        
+        inventory[index][property] = value;
+        renderTable(); // 重新渲染表格以更新总价
+    }
+
+    // 添加新产品
+    function addProduct() {
+        const id = document.getElementById('newId').value;
+        const name = document.getElementById('newName').value;
+        const quantity = parseInt(document.getElementById('newQuantity').value) || 0;
+        const price = parseFloat(document.getElementById('newPrice').value) || 0;
+        
+        if (!id || !name) {
+            alert('请输入产品ID和名称');
+            return;
+        }
+        
+        inventory.push({ id, name, quantity, price });
+        renderTable();
+        
+        // 清空输入框
+        document.getElementById('newId').value = '';
+        document.getElementById('newName').value = '';
+        document.getElementById('newQuantity').value = '';
+        document.getElementById('newPrice').value = '';
+    }
+
+    // 删除产品
+    function deleteProduct(index) {
+        if (confirm('确定要删除这个产品吗?')) {
+            inventory.splice(index, 1);
+            renderTable();
+        }
+    }
+
+    // 保存数据到本地存储
+    function saveData() {
+        localStorage.setItem('inventoryData', JSON.stringify(inventory));
+        alert('数据已保存到浏览器本地存储');
+    }
+
+    // 从本地存储加载数据
+    function loadData() {
+        const savedData = localStorage.getItem('inventoryData');
+        if (savedData) {
+            inventory = JSON.parse(savedData);
+            renderTable();
+            alert('数据已从浏览器本地存储加载');
+        } else {
+            alert('没有找到保存的数据');
+        }
+    }
+
+    // 导出为CSV
+    function exportToCSV() {
+        let csv = '产品ID,产品名称,数量,单价,总价\n';
+        
+        inventory.forEach(product => {
+            const total = product.quantity * product.price;
+            csv += `${product.id},${product.name},${product.quantity},${product.price.toFixed(2)},${total.toFixed(2)}\n`;
+        });
+        
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('hidden', '');
+        a.setAttribute('href', url);
+        a.setAttribute('download', '库存数据.csv');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+</script>
+
+</body>
+</html>
