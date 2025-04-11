@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>消耗品管理系统</title>
+    <style>
+        /* 之前的样式保持不变 */
+        .settings-panel {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .notification {
+            background-color: #ffeb3b;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        /* 提醒弹窗样式 */
+        .alert-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .alert-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 80%;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .alert-title {
+            color: #d32f2f;
+            margin-top: 0;
+        }
+        .alert-item {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+        }
+        .close-alert {
+            background-color: #d32f2f;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin-top: 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>消耗品管理</h1>
+
+<!-- 新增设置面板 -->
+<div class="settings-panel">
+    <h3>提醒设置</h3>
+    <div>
+        <label>提前提醒天数: </label>
+        <input type="number" id="daysBefore" min="1" value="3">
+        <button onclick="saveNotificationSettings()">保存设置</button>
+    </div>
+    <div class="notification" id="browserNotification"></div>
+</div>
+
+<!-- 提醒弹窗 -->
+<div id="alertModal" class="alert-modal">
+    <div class="alert-content">
+        <h3 class="alert-title">⚠️ 消耗品即将用完!</h3>
+        <div id="alertItems"></div>
+        <button class="close-alert" onclick="closeAlert()">我知道了</button>
+    </div>
+</div>
+
+<!-- 之前的add-form和action-buttons保持不变 -->
+
+<script>
+    // 在之前代码的基础上添加以下功能
+
+    // 加载提醒设置
+    function loadNotificationSettings() {
+        const settings = JSON.parse(localStorage.getItem('notificationSettings')) || {};
+        document.getElementById('daysBefore').value = settings.daysBefore || 3;
+    }
+
+    // 保存提醒设置
+    function saveNotificationSettings() {
+        const settings = {
+            daysBefore: parseInt(document.getElementById('daysBefore').value) || 3
+        };
+        localStorage.setItem('notificationSettings', JSON.stringify(settings));
+        showBrowserNotification('提醒设置已保存');
+    }
+
+    // 检查需要提醒的物品
+    function checkForLowStock() {
+        const settings = JSON.parse(localStorage.getItem('notificationSettings')) || {};
+        const thresholdDays = settings.daysBefore || 3;
+        
+        const now = new Date();
+        const lowStockItems = [];
+        
+        inventory.forEach(item => {
+            const depletionDate = calculateDepletionDate(item, true); // 获取Date对象
+            if (depletionDate === "无消耗") return;
+            
+            const daysLeft = Math.ceil((depletionDate - now) / (1000 * 60 * 60 * 24));
+            if (daysLeft <= thresholdDays) {
+                lowStockItems.push({
+                    name: item.name,
+                    type: item.type,
+                    remain: item.remain,
+                    daysLeft: daysLeft
+                });
+            }
+        });
+        
+        if (lowStockItems.length > 0) {
+            showAlert(lowStockItems, thresholdDays);
+        }
+    }
+
+    // 显示浏览器弹窗提醒
+    function showAlert(items, daysBefore) {
+        const alertModal = document.getElementById('alertModal');
+        const alertItems = document.getElementById('alertItems');
+        
+        alertItems.innerHTML = `
+            <p>以下物品将在${daysBefore}天内用完:</p>
+            ${items.map(item => `
+                <div class="alert-item">
+                    <strong>${item.name}</strong> (${item.type})<br>
+                    剩余数量: ${item.remain}<br>
+                    预计 ${item.daysLeft} 天后用完
+                </div>
+            `).join('')}
+        `;
+        
+        alertModal.style.display = 'flex';
+        
+        // 同时显示浏览器通知 (如果支持)
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const notification = new Notification('消耗品即将用完', {
+                body: `有 ${items.length} 种物品需要补充`,
+                icon: 'https://cdn-icons-png.flaticon.com/512/3524/3524636.png'
+            });
+        }
+    }
+
+    // 关闭弹窗
+    function closeAlert() {
+        document.getElementById('alertModal').style.display = 'none';
+    }
+
+    // 显示浏览器通知
+    function showBrowserNotification(message, isError = false) {
+        const notification = document.getElementById('browserNotification');
+        notification.textContent = message;
+        notification.style.display = 'block';
+        notification.style.backgroundColor = isError ? '#ffcdd2' : '#c8e6c9';
+        
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 5000);
+    }
+
+    // 请求浏览器通知权限
+    function requestNotificationPermission() {
+        if ('Notification' in window) {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    console.log('通知权限已授予');
+                }
+            });
+        }
+    }
+
+    // 在页面加载时添加
+    document.addEventListener('DOMContentLoaded', function() {
+        loadNotificationSettings();
+        requestNotificationPermission();
+        
+        // 每小时检查一次
+        setInterval(checkForLowStock, 60 * 60 * 1000);
+        // 页面加载时也检查一次
+        checkForLowStock();
+    });
+
+    // 修改后的计算日期函数，返回Date对象
+    function calculateDepletionDate(item, returnDate = false) {
+        if (!item.remain || !item.rate || item.rate <= 0) return "无消耗";
+        
+        const daysLeft = item.remain / item.rate;
+        let daysToAdd = daysLeft;
+        
+        if (item.unit === 'week') daysToAdd = daysLeft * 7;
+        if (item.unit === 'month') daysToAdd = daysLeft * 30;
+        
+        const depletionDate = new Date(item.addedDate);
+        depletionDate.setDate(depletionDate.getDate() + daysToAdd);
+        
+        return returnDate ? depletionDate : depletionDate.toLocaleDateString();
+    }
+
+    // 保持原有的saveData和loadData函数不变
+</script>
+</body>
+</html>
