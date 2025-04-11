@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>简易库存管理系统</title>
+    <title>消耗品管理系统</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -42,9 +42,13 @@
             background-color: #f5f5f5;
             border-radius: 5px;
         }
-        .add-form input {
+        .add-form input, .add-form select {
             margin-right: 10px;
             padding: 5px;
+        }
+        .consumption-rate {
+            display: inline-flex;
+            align-items: center;
         }
     </style>
 </head>
@@ -54,15 +58,17 @@
 
 <div class="add-form">
     <h3>添加物品</h3>
-    <input type="text" id="newId" placeholder="物品名称">
-    <input type="text" id="type" placeholder="类型">
-    <!--<input type="number" id="newPrice" placeholder="价格" min="0" step="0.01">-->
-    <!--添加-->
-    <input type="number" id="numRemain" placeholder="剩余数量" min="0" step="0.01">
-        <!--numRemain/consumeRate = 可继续使用时间。在添加后的表格里显示为需补充日期 -->
-        <!--消耗速度的输入框右侧需要一个dropbox，选择是numConsume每天/周/月-->
-    <input type="number" id="consumeRate" placeholder="消耗速度（每天/周）" min="0" step="0.01">
-    <!--添加-->
+    <input type="text" id="itemName" placeholder="物品名称" required>
+    <input type="text" id="itemType" placeholder="类型">
+    <input type="number" id="numRemain" placeholder="剩余数量" min="0" step="1" required>
+    <div class="consumption-rate">
+        <input type="number" id="consumeRate" placeholder="消耗速度" min="0" step="0.01" required>
+        <select id="rateUnit">
+            <option value="day">每天</option>
+            <option value="week">每周</option>
+            <option value="month">每月</option>
+        </select>
+    </div>
     <button onclick="addProduct()">添加</button>
 </div>
 
@@ -75,10 +81,12 @@
 <table id="inventoryTable">
     <thead>
         <tr>
-            <th>产品名称</th>
-            <th>数量</th>
+            <th>物品名称</th>
+            <th>类型</th>
             <th>剩余数量</th>
+            <th>消耗速度</th>
             <th>预计清零日期</th>
+            <th>操作</th>
         </tr>
     </thead>
     <tbody>
@@ -89,13 +97,37 @@
 <script>
     // 初始化库存数据
     let inventory = [
-        { name: '此处输入消耗品名称', quantity: 1, price: 99.99, date:1/2/2025 },
+        { 
+            name: '双击表格可编辑', 
+            type: '洗浴用品', 
+            remain: 50, 
+            rate: 5, 
+            unit: 'day',
+            addedDate: new Date()
+        }
     ];
 
     // 页面加载时渲染表格
     document.addEventListener('DOMContentLoaded', function() {
         renderTable();
     });
+
+    // 计算预计清零日期
+    function calculateDepletionDate(item) {
+        if (!item.remain || !item.rate || item.rate <= 0) return "无消耗";
+        
+        const daysLeft = item.remain / item.rate;
+        let daysToAdd = daysLeft;
+        
+        // 根据单位调整天数
+        if (item.unit === 'week') daysToAdd = daysLeft * 7;
+        if (item.unit === 'month') daysToAdd = daysLeft * 30; // 简化计算，每月按30天
+        
+        const depletionDate = new Date(item.addedDate);
+        depletionDate.setDate(depletionDate.getDate() + daysToAdd);
+        
+        return depletionDate.toLocaleDateString();
+    }
 
     // 渲染表格函数
     function renderTable() {
@@ -104,13 +136,15 @@
         
         inventory.forEach((product, index) => {
             const row = document.createElement('tr');
-            const total = product.quantity * product.price;
+            const depletionDate = calculateDepletionDate(product);
+            const rateText = `${product.rate} ${getUnitText(product.unit)}`;
             
             row.innerHTML = `
                 <td contenteditable="true" onblur="updateProduct(${index}, 'name', this)">${product.name}</td>
-                <td contenteditable="true" onblur="updateProduct(${index}, 'quantity', this)">${product.quantity}</td>
-                <td contenteditable="true" onblur="updateProduct(${index}, 'price', this)">${product.price.toFixed(2)}</td>
-                <td>${total.toFixed(2)}</td>
+                <td contenteditable="true" onblur="updateProduct(${index}, 'type', this)">${product.type}</td>
+                <td contenteditable="true" onblur="updateProduct(${index}, 'remain', this)">${product.remain}</td>
+                <td>${rateText}</td>
+                <td>${depletionDate}</td>
                 <td><button onclick="deleteProduct(${index})">删除</button></td>
             `;
             
@@ -118,41 +152,64 @@
         });
     }
 
+    // 获取单位文本
+    function getUnitText(unit) {
+        switch(unit) {
+            case 'day': return '每天';
+            case 'week': return '每周';
+            case 'month': return '每月';
+            default: return '';
+        }
+    }
+
     // 更新产品信息
     function updateProduct(index, property, element) {
-        const value = property === 'quantity' || property === 'price' 
-            ? parseFloat(element.textContent) 
-            : element.textContent;
+        let value;
+        
+        if (property === 'remain') {
+            value = parseInt(element.textContent) || 0;
+        } else {
+            value = element.textContent;
+        }
         
         inventory[index][property] = value;
-        renderTable(); // 重新渲染表格以更新总价
+        renderTable(); // 重新渲染表格以更新预计清零日期
     }
 
     // 添加新产品
     function addProduct() {
-        const id = document.getElementById('newId').value;
-        const name = document.getElementById('newName').value;
-        const quantity = parseInt(document.getElementById('newQuantity').value) || 0;
-        const price = parseFloat(document.getElementById('newPrice').value) || 0;
+        const name = document.getElementById('itemName').value;
+        const type = document.getElementById('itemType').value;
+        const remain = parseInt(document.getElementById('numRemain').value) || 0;
+        const rate = parseFloat(document.getElementById('consumeRate').value) || 0;
+        const unit = document.getElementById('rateUnit').value;
         
-        if (!id || !name) {
-            alert('请输入产品ID和名称');
+        if (!name) {
+            alert('请输入物品名称');
             return;
         }
         
-        inventory.push({ id, name, quantity, price });
+        inventory.push({ 
+            name, 
+            type, 
+            remain, 
+            rate, 
+            unit,
+            addedDate: new Date()
+        });
+        
         renderTable();
         
         // 清空输入框
-        document.getElementById('newId').value = '';
-        document.getElementById('newName').value = '';
-        document.getElementById('newQuantity').value = '';
-        document.getElementById('newPrice').value = '';
+        document.getElementById('itemName').value = '';
+        document.getElementById('itemType').value = '';
+        document.getElementById('numRemain').value = '';
+        document.getElementById('consumeRate').value = '';
     }
 
     // 删除产品
     function deleteProduct(index) {
-        if (confirm('确定要删除这个产品吗?')) {
+        if (confirm('确定删除吗?')) {
             inventory.splice(index, 1);
             renderTable();
         }
@@ -160,13 +217,13 @@
 
     // 保存数据到本地存储
     function saveData() {
-        localStorage.setItem('inventoryData', JSON.stringify(inventory));
+        localStorage.setItem('consumablesData', JSON.stringify(inventory));
         alert('数据已保存到浏览器本地存储');
     }
 
     // 从本地存储加载数据
     function loadData() {
-        const savedData = localStorage.getItem('inventoryData');
+        const savedData = localStorage.getItem('consumablesData');
         if (savedData) {
             inventory = JSON.parse(savedData);
             renderTable();
@@ -178,19 +235,20 @@
 
     // 导出为CSV
     function exportToCSV() {
-        let csv = '产品ID,产品名称,数量,单价,总价\n';
+        let csv = '物品名称,类型,剩余数量,消耗速度,预计清零日期\n';
         
         inventory.forEach(product => {
-            const total = product.quantity * product.price;
-            csv += `${product.id},${product.name},${product.quantity},${product.price.toFixed(2)},${total.toFixed(2)}\n`;
+            const rateText = `${product.rate} ${getUnitText(product.unit)}`;
+            const depletionDate = calculateDepletionDate(product);
+            csv += `"${product.name}","${product.type}",${product.remain},"${rateText}","${depletionDate}"\n`;
         });
         
-        const blob = new Blob([csv], { type: 'text/csv' });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.setAttribute('hidden', '');
         a.setAttribute('href', url);
-        a.setAttribute('download', '库存数据.csv');
+        a.setAttribute('download', '消耗品数据.csv');
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
