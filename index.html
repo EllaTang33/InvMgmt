@@ -50,6 +50,13 @@
             display: inline-flex;
             align-items: center;
         }
+        .type-selector {
+            display: flex;
+            align-items: center;
+        }
+        .type-selector select {
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -59,7 +66,15 @@
 <div class="add-form">
     <h3>添加物品</h3>
     <input type="text" id="itemName" placeholder="物品名称" required>
-    <input type="text" id="itemType" placeholder="类型">
+    
+    <div class="type-selector">
+        <select id="itemTypeSelect">
+            <option value="">选择类型...</option>
+            <!-- 动态类型选项将在这里生成 -->
+        </select>
+        <input type="text" id="itemTypeInput" placeholder="或输入新类型">
+    </div>
+    
     <input type="number" id="numRemain" placeholder="剩余数量" min="0" step="1" required>
     <div class="consumption-rate">
         <input type="number" id="consumeRate" placeholder="消耗速度" min="0" step="0.01" required>
@@ -81,7 +96,7 @@
 <table id="inventoryTable">
     <thead>
         <tr>
-            <th>物品名称</th>
+            <th>名称</th>
             <th>类型</th>
             <th>剩余数量</th>
             <th>消耗速度</th>
@@ -95,22 +110,45 @@
 </table>
 
 <script>
-    // 初始化库存数据
+    // 初始化库存数据和类型集合
     let inventory = [
         { 
-            name: '双击表格可编辑', 
-            type: '洗浴用品', 
+            name: '双击表格即可编辑', 
+            type: '办公', 
             remain: 50, 
             rate: 5, 
             unit: 'day',
             addedDate: new Date()
         }
     ];
+    
+    let typeSet = new Set(["办公用品"]); // 存储所有类型的集合
 
-    // 页面加载时渲染表格
+    // 页面加载时渲染表格和类型下拉框
     document.addEventListener('DOMContentLoaded', function() {
         renderTable();
+        updateTypeDropdown();
     });
+
+    // 更新类型下拉框
+    function updateTypeDropdown() {
+        const typeSelect = document.getElementById('itemTypeSelect');
+        
+        // 清空现有选项（保留第一个"选择类型"选项）
+        while (typeSelect.options.length > 1) {
+            typeSelect.remove(1);
+        }
+        
+        // 添加收集到的所有类型
+        Array.from(typeSet).sort().forEach(type => {
+            if (type.trim() !== "") { // 跳过空类型
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                typeSelect.appendChild(option);
+            }
+        });
+    }
 
     // 计算预计清零日期
     function calculateDepletionDate(item) {
@@ -164,12 +202,16 @@
 
     // 更新产品信息
     function updateProduct(index, property, element) {
-        let value;
+        let value = element.textContent;
         
         if (property === 'remain') {
-            value = parseInt(element.textContent) || 0;
-        } else {
-            value = element.textContent;
+            value = parseInt(value) || 0;
+        }
+        
+        // 如果是类型更新，需要更新类型集合
+        if (property === 'type' && value.trim() !== "") {
+            typeSet.add(value);
+            updateTypeDropdown();
         }
         
         inventory[index][property] = value;
@@ -179,7 +221,8 @@
     // 添加新产品
     function addProduct() {
         const name = document.getElementById('itemName').value;
-        const type = document.getElementById('itemType').value;
+        let type = document.getElementById('itemTypeSelect').value;
+        const typeInput = document.getElementById('itemTypeInput').value;
         const remain = parseInt(document.getElementById('numRemain').value) || 0;
         const rate = parseFloat(document.getElementById('consumeRate').value) || 0;
         const unit = document.getElementById('rateUnit').value;
@@ -188,6 +231,20 @@
             alert('请输入物品名称');
             return;
         }
+        
+        // 优先使用输入框中的新类型
+        if (typeInput.trim() !== "") {
+            type = typeInput.trim();
+        }
+        
+        if (!type) {
+            alert('请选择或输入类型');
+            return;
+        }
+        
+        // 添加到类型集合
+        typeSet.add(type);
+        updateTypeDropdown();
         
         inventory.push({ 
             name, 
@@ -202,14 +259,15 @@
         
         // 清空输入框
         document.getElementById('itemName').value = '';
-        document.getElementById('itemType').value = '';
+        document.getElementById('itemTypeSelect').value = '';
+        document.getElementById('itemTypeInput').value = '';
         document.getElementById('numRemain').value = '';
         document.getElementById('consumeRate').value = '';
     }
 
     // 删除产品
     function deleteProduct(index) {
-        if (confirm('确定删除吗?')) {
+        if (confirm('确定要删除这个物品吗?')) {
             inventory.splice(index, 1);
             renderTable();
         }
@@ -217,7 +275,11 @@
 
     // 保存数据到本地存储
     function saveData() {
-        localStorage.setItem('consumablesData', JSON.stringify(inventory));
+        const dataToSave = {
+            inventory: inventory,
+            types: Array.from(typeSet)
+        };
+        localStorage.setItem('consumablesData', JSON.stringify(dataToSave));
         alert('数据已保存到浏览器本地存储');
     }
 
@@ -225,8 +287,12 @@
     function loadData() {
         const savedData = localStorage.getItem('consumablesData');
         if (savedData) {
-            inventory = JSON.parse(savedData);
+            const parsedData = JSON.parse(savedData);
+            inventory = parsedData.inventory || [];
+            typeSet = new Set(parsedData.types || []);
+            
             renderTable();
+            updateTypeDropdown();
             alert('数据已从浏览器本地存储加载');
         } else {
             alert('没有找到保存的数据');
